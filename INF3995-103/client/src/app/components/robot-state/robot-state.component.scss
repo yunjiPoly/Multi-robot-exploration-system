@@ -1,0 +1,71 @@
+.robot_state {
+
+    @media screen and ((max-width: 500px) or (min-width: 896px)) {
+        flex-direction: row !important;
+        width: 100%;
+        justify-content: center;
+        align-items: center;
+        margin-top: 1px;
+
+    }
+
+    @media screen and (min-width: 500px) {
+        width: 100%;
+        margin-top: 16px;
+        justify-content: flex-start;
+        flex-direction: row;
+        flex-wrap: wrap-reverse;
+        button {
+            margin-bottom: 1px;
+        }
+    }
+
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    width: 100%;
+    gap: 10%;
+    margin-bottom: 10px;
+    font-size: 1.2em;
+
+    &__battery {
+        display: flex;
+        flex-direction: column;
+        @media screen and ((min-width: 500px) and (max-width: 660px)) {
+            flex-direction: row;
+            display: flex;
+            align-content: center;
+            align-items: center;
+        }
+    }
+    &__button {
+
+        cursor: pointer;
+        border-radius: 5px;
+        font-size: 1em;
+        height: 10px;
+        border: none;
+        color: white;
+        &--regular {
+ 
+            height: 25px;
+            &:hover {
+                background-color: rgb(201, 201, 201);
+            }
+        }
+    }
+
+    &__text {
+        @media screen and (max-width: 896px) {
+            display: flex;
+            flex-direction: column;
+        }
+
+        p {
+            &:last-child {
+                margin-bottom: 0;
+            }
+        }
+    }
+
+}

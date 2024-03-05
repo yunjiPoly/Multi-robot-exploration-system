@@ -1,0 +1,66 @@
+diff --git a/limo_bringup/launch/limo_start.launch b/limo_bringup/launch/limo_start.launch
+index c7919dc..9636a93 100644
+--- a/limo_bringup/launch/limo_start.launch
++++ b/limo_bringup/launch/limo_start.launch
+@@ -10,7 +10,7 @@
+         <arg name="use_mcnamu" default="$(arg use_mcnamu)" />
+     </include>
+ 
+-    <include file="$(find ydlidar_ros)/launch/X2L.launch" />
++    <include file="$(find ydlidar_ros_driver)/launch/X2.launch" />
+ 
+     <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser_link" args="0.105 0.0 0.08 0.0 0.0 0.0 /base_link /laser_link 10" />
+     <node pkg="tf" type="static_transform_publisher" name="base_link_to_imu_link" args="0.0 0.0 0.0 0.0 0.0 0.0 /base_link /imu_link 10" />
+diff --git a/limo_base/include/limo_driver.h b/limo_base/include/limo_driver.h
+index da22c0c..f9e3ba3 100644
+--- a/limo_base/include/limo_driver.h
++++ b/limo_base/include/limo_driver.h
+@@ -78,6 +78,7 @@ private:
+ 
+     std::string odom_frame_;
+     std::string base_frame_;
++    std::string imu_frame_;
+     bool pub_odom_tf_ = false;
+     bool use_mcnamu_ = false;
+ 
+diff --git a/limo_base/launch/limo_base.launch b/limo_base/launch/limo_base.launch
+index 7c0f6f9..df65d05 100644
+--- a/limo_base/launch/limo_base.launch
++++ b/limo_base/launch/limo_base.launch
+@@ -5,6 +5,7 @@
+     <arg name="port_name" default="ttyTHS1" />
+     <arg name="odom_frame" default="odom" />
+     <arg name="base_frame" default="base_link" />
++    <arg name="imu_frame" default="imu_link" />
+     <arg name="use_mcnamu" default="false" />
+     <arg name="pub_odom_tf" default="false" />
+ 
+@@ -12,6 +13,7 @@
+         <param name="port_name" value="$(arg port_name)" />
+         <param name="odom_frame" value="$(arg odom_frame)" />
+         <param name="base_frame" value="$(arg base_frame)" />
++        <param name="imu_frame" value="$(arg imu_frame)" />
+         <param name="use_mcnamu" value="$(arg use_mcnamu)" />
+         <param name="pub_odom_tf" value="$(arg pub_odom_tf)" />
+     </node>
+diff --git a/limo_base/src/limo_driver.cpp b/limo_base/src/limo_driver.cpp
+index b0427d5..5bf1087 100644
+--- a/limo_base/src/limo_driver.cpp
++++ b/limo_base/src/limo_driver.cpp
+@@ -40,6 +40,7 @@ LimoDriver::LimoDriver()  {
+     private_nh.param<std::string>("port_name", port_name, std::string("ttyTHS1"));
+     private_nh.param<std::string>("odom_frame", odom_frame_, std::string("odom"));
+     private_nh.param<std::string>("base_frame", base_frame_, std::string("base_link"));
++    private_nh.param<std::string>("imu_frame", imu_frame_, std::string("imu_link"));
+     private_nh.param<bool>("pub_odom_tf", pub_odom_tf_, false);
+     private_nh.param<bool>("use_mcnamu", use_mcnamu_, false);
+ 
+@@ -383,7 +384,7 @@ void LimoDriver::publishIMUData(double stamp) {
+     sensor_msgs::Imu imu_msg;
+        
+     imu_msg.header.stamp = ros::Time(stamp);
+-    imu_msg.header.frame_id = "imu_link";
++    imu_msg.header.frame_id = imu_frame_;
+ 
+     imu_msg.linear_acceleration.x = imu_data_.accel_x;
+     imu_msg.linear_acceleration.y = imu_data_.accel_y;

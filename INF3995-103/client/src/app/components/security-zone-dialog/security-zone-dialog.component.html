@@ -1,0 +1,70 @@
+<div class="dialog-container">
+    <h2 mat-dialog-title>Ajouter une zone de sécurité</h2>
+    <p class="description">La zone à explorer est une grille de 10m x 10m centrée en (0, 0). Les coordonnées en x et en y de chaque point sont situées dans l'intervalle [-5, 5].</p>
+    <div class="container">
+        <form [formGroup]="formParameters" class="inner-container" (ngSubmit)="createSecurityZone()">
+            <div class="input-container">
+                <p class="label">Choisissez l'origine de la zone de sécurité (en mètres) :</p>
+                <div class="origin-container">
+                    <mat-form-field>
+                        <mat-label>Position en X</mat-label>
+                        <input
+                        matInput
+                        type="number"
+                        formControlName="originX"
+                        autocomplete="off"
+                        />
+                    </mat-form-field>
+                    <mat-form-field>
+                        <mat-label>Position en Y</mat-label>
+                        <input
+                        matInput
+                        type="number"
+                        formControlName="originY"
+                        autocomplete="off"
+                        />  
+                    </mat-form-field>
+                </div>
+                <mat-error>
+                    <span *ngIf="this.formParameters.get('originX')?.invalid || this.formParameters.get('originY')?.invalid">Les coordonnées en x et en y de l'origine de la zone de sécurité doivent être entre [-5, 5].</span>
+                </mat-error>
+                <p class="label">Choisissez les dimensions de la zone de sécurité (en mètres) : </p>
+                <div>
+                    <mat-form-field> 
+                        <mat-label id="origin-label">Largeur</mat-label>
+                        <input
+                            matInput
+                            type="number"
+                            formControlName="width"
+                            autocomplete="off"
+                        />
+                    </mat-form-field>
+                    <mat-form-field>
+                        <mat-label id="origin-label">Hauteur</mat-label>
+                        <input
+                            matInput
+                            type="number"
+                            formControlName="height"
+                            autocomplete="off"
+                        />
+                    </mat-form-field>
+                </div>
+                <mat-error>
+                    <span *ngIf="this.formParameters.hasError('areaTooSmall')">La portion de la zone de sécurité située à l'intérieur de la zone à explorer doit mesurer au moins 4m<sup>2</sup>.</span>
+                </mat-error>
+            </div>
+            <div class="buttons-container">
+                <button mat flat button mat-button color="basic" type ="button" (click)="closeDialog()">
+                    <mat-icon>not_interested</mat-icon>
+                    Annuler
+                </button> 
+                <button mat-flat-button id="create-button" color="primary" type="submit" [disabled]="this.formParameters.invalid">
+                    <mat-icon>add_circle</mat-icon>
+                    Créer
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+    
+

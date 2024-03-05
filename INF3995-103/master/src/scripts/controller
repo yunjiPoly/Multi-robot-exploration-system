@@ -1,0 +1,374 @@
+#!/usr/bin/env python
+
+import sys
+import json
+import math
+from enum import Enum
+import subprocess
+import signal
+import numpy as np
+import os
+
+import rospy
+import rospkg
+import tf
+import actionlib
+import sensor_msgs.point_cloud2 as pc2
+
+from geometry_msgs.msg import Twist, Point
+from std_msgs.msg import String, Float64
+from nav_msgs.msg import OccupancyGrid, Odometry
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from sensor_msgs.msg import PointCloud2, PointField
+from limo_base.msg import LimoStatus
+
+LIMO_IPS = ['192.168.1.130', '192.168.1.170']
+
+RETURN_TO_BASE_DELAY = 60
+RETURN_TO_BASE_DELAY_KILL = 5 * 60
+RETURN_TO_BASE_DST_TARGET = 0.5
+RETURN_TO_BASE_THRESHOLD = 30
+
+MAX_VOLTAGE = 12
+MIN_VOLTAGE = 9
+
+RETURN_MESSAGE = 'return'
+
+ENDPOINT_MISSION_CMD = '/mission_cmd'
+ENDPOINT_ROBOT_POSITION = '/robot_position'
+ENDPOINT_ROBOT_STATE = '/robot_state'
+ENDPOINT_SECURITY_ZONE = '/security_zone'
+ENDPOINT_LOW_BATTERY = '/low_battery'
+ENDPOINT_ID_LIMO = lambda id: f"/{id}/identify"
+EXPLORE_LITE_LIMO = lambda id: f"/{id}/explorelite"
+MOVE_BASE_LIMO = lambda id: f"/{id}/move_base"
+
+MAP_FRAME = '/map'
+ROBOT_FRAME = lambda id: f"{id}/base_link"
+ODOM_FRAME = lambda id: f"{id}/odom"
+ROBOT_STATE = lambda id: f"{id}/limo_status"
+
+class Simulation(Enum):
+    Start = 'start'
+    Stop = 'stop'
+    Ready = 'ready'
+    Loading = 'loading'
+    Failed = 'failed'
+
+class RobotState(Enum):
+    Running = 'En mission'
+    Off = 'Arrêté'
+
+class RobotType(Enum):
+    Drone = 'Drone'
+    Rover = 'Rover'
+
+class Command(Enum):
+    Start = 'start'
+    Stop = 'stop'
+    Identify = 'identify'
+
+class MissionType(Enum):
+    Simulation = 'Simulation'
+    Real = 'Réelle'
+
+def host_is_up(ip):
+    return subprocess.run(
+        args=["ping", "-c", "1", "-w1", ip],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    ).returncode == 0
+
+class RobotInterface:
+    def __init__(self, id, name, target_frame, initial_position):
+        self.id = id
+        self.name = name
+        self.target_frame = target_frame
+        self.initial_position = initial_position
+        self.last_position = initial_position
+        self.distance = Float64()
+        self.distance.data = 0.0
+        self.listener = tf.TransformListener()
+        self.state = RobotState.Off.value
+        self.type = RobotType.Rover.value
+        self.battery_percentage = 0.0
+        self.pub_low_battery = rospy.Publisher(ENDPOINT_LOW_BATTERY, String, queue_size=2)
+        self.pub_id = rospy.Publisher(ENDPOINT_ID_LIMO(id), String, queue_size=2)
+        self.sub_limo_status = rospy.Subscriber(ROBOT_STATE(id), LimoStatus, self.callback_battery)
+        self.process = None
+        self.sub_odom = rospy.Subscriber(ODOM_FRAME(id), Odometry, self.callback_odom)
+        self.stopping = False
+
+    def start_real(self, ip, server_ip, x, y, yaw):
+        self.process = subprocess.Popen([
+            'roslaunch', 'master', 'limo_real.launch',
+            f'robot_namespace:={self.id}',
+            f'ip:={ip}',
+            f'server_ip:={server_ip}',
+            f'x:={x}',
+            f'y:={y}',
+            f'yaw:={yaw}'
+        ])
+
+    def kill(self):
+        if self.process is not None:
+            self.process.send_signal(signal.SIGINT)
+    
+    def stop(self, return_to_base):
+        if self.stopping: return lambda: ()
+        self.stopping = True
+        if return_to_base:
+            rospy.loginfo('Returning to base')
+            subprocess.call(['rosnode', 'kill', EXPLORE_LITE_LIMO(self.id)])
+            move_client = actionlib.SimpleActionClient(MOVE_BASE_LIMO(self.id), MoveBaseAction)
+            move_client.wait_for_server()
+            start = rospy.Time.now()
+            goal = self.goal_return_to_base()
+            cb = self._gen_feedback_cb(move_client, start, goal.target_pose)
+            move_client.send_goal(goal, feedback_cb = cb)
+            return lambda: move_client.wait_for_result(rospy.Duration(RETURN_TO_BASE_DELAY_KILL))
+        return lambda: ()
+
+    def _gen_feedback_cb(self, move_client, start, target):
+        approximate_timeout = start + rospy.Duration.from_sec(RETURN_TO_BASE_DELAY)
+        listener = tf.TransformListener()
+        def callback(feedback):
+            if rospy.Time.now() < approximate_timeout:
+                return
+            position = listener.transformPose(target.header.frame_id, feedback.base_position)
+            dx = position.pose.position.x - target.pose.position.x
+            dy = position.pose.position.y - target.pose.position.y
+            dst = dx**2 + dy**2
+            if dst <= RETURN_TO_BASE_DST_TARGET**2:
+                move_client.cancel_goal()
+                self.kill()
+        return callback
+    
+    def compute_position(self):
+        try:
+            (robot_position, robot_orientation) = self.listener.lookupTransform(self.target_frame, ROBOT_FRAME(self.id), rospy.Time(0))
+        
+            _, _, yaw = tf.transformations.euler_from_quaternion(robot_orientation)
+            yaw_degrees = math.degrees(yaw)
+
+            return { 'x': round(robot_position[0], 3), 'y': round(robot_position[1], 3), 'orientation': round(yaw_degrees, 2) }
+        except:
+            return None
+    
+    def goal_return_to_base(self):
+        goal = MoveBaseGoal()
+        goal.target_pose.header.frame_id = 'map'
+        goal.target_pose.pose.position = self.initial_position
+        goal.target_pose.pose.orientation.x = 0.0
+        goal.target_pose.pose.orientation.y = 0.0
+        goal.target_pose.pose.orientation.z = 0.0
+        goal.target_pose.pose.orientation.w = 1.0
+
+        goal.target_pose = self.listener.transformPose(ODOM_FRAME(self.id), goal.target_pose)
+
+        # Make sure z-axis of quaternion is 0 for navigation
+        goal.target_pose.pose.orientation.w = math.sqrt(
+            goal.target_pose.pose.orientation.z**2 +
+            goal.target_pose.pose.orientation.w**2
+        )
+        goal.target_pose.pose.orientation.z = 0.0
+        
+        return goal
+
+    def identify(self):
+        self.pub_id.publish(self.id)
+
+    def get_battery_percentage(self, voltage):
+        return round((voltage - MIN_VOLTAGE)/(MAX_VOLTAGE - MIN_VOLTAGE) * 100, 0)
+
+    def callback_battery(self, data):
+        battery_percentage = self.get_battery_percentage(float(data.battery_voltage))
+        self.battery_percentage = battery_percentage
+        if battery_percentage <= RETURN_TO_BASE_THRESHOLD:
+            self.pub_low_battery.publish(self.id)
+
+            wait_for_return = self.stop(True)
+            wait_for_return()
+            self.state = RobotState.Off.value
+            self.kill()
+
+    def callback_odom(self, data):
+        current_position = data.pose.pose.position
+        self.distance.data += math.hypot(current_position.x - self.last_position.x, current_position.y - self.last_position.y)
+        self.last_position = current_position
+
+    def compute_distance(self):
+        return float("{:.2f}".format(self.distance.data))
+
+class MissionManager:
+    def __init__(self):
+        rospy.init_node('master', anonymous=True)
+
+        self.isMissionStarted = False
+        self.process = None
+        self.robots = []
+        
+        self.pub_position = rospy.Publisher(ENDPOINT_ROBOT_POSITION, String, queue_size=2)
+        self.pub_state = rospy.Publisher(ENDPOINT_ROBOT_STATE, String, queue_size=2)
+
+        self.sub_mission_cmd = rospy.Subscriber(ENDPOINT_MISSION_CMD, String, self.callback_cmd)
+
+    
+    def start_real_mission(self, positions):
+        if self.isMissionStarted:
+            rospy.logwarn('Mission already running')
+            return
+        rospy.loginfo('Starting real mission...')
+
+        rospack = rospkg.RosPack()
+        path = rospack.get_path('master')
+
+        server_ip = os.getenv('ROS_MASTER_URI', 'http://127.0.0.1:11311').split('://')[1].rsplit(':')[0]
+
+        self.process = subprocess.Popen(['roslaunch', 'master', 'real.launch'])
+        
+        self.robots = []
+        for ip in LIMO_IPS:
+            rospy.loginfo(f'Testing IP {ip}')
+            if host_is_up(ip):
+                rospy.loginfo(f'Found limo at IP {ip}')
+                subprocess.call(['sshpass', '-pagx', 'scp', f'{path}/assets/inf3995-103-setup.sh', f'agilex@{ip}:/home/agilex'])
+                i = len(self.robots)
+                (x, y, yaw) = positions[i] if i > len(positions) else (0.0, 0.8 * i, 0.0)
+                robot = RobotInterface(f'limo{i + 1}', f'Limo {i + 1}', MAP_FRAME, Point(x = x, y = y, z = 0.0))
+                self.robots.append(robot)
+                robot.start_real(ip, server_ip, x, y, yaw)
+
+    
+    def start_sim(self, positions):
+        if self.isMissionStarted:
+            rospy.logwarn('Mission already running')
+            return
+        rospy.loginfo('Starting simulation...')
+
+        self.robots = [
+            RobotInterface('limo1', 'Limo 1', MAP_FRAME, Point(x = 0.0, y = 0.0, z = 0.0)),
+            RobotInterface('limo2', 'Limo 2', MAP_FRAME, Point(x = positions[1][0], y = positions[1][1], z = 0.0)),
+        ]
+
+        self.process = subprocess.Popen(['roslaunch', 'master', 'sim.launch', 'gui:=true', 'rviz:=true', f'x:={positions[1][0]}', f'y:={positions[1][1]}', f'yaw:={positions[1][2]}',])
+
+
+    def kill(self, return_to_base: bool):
+        if not self.isMissionStarted:
+            return
+        
+        promises = [robot.stop(return_to_base) for robot in self.robots]
+
+        for promise in promises:
+            promise()
+
+        for robot in self.robots:
+            robot.state = RobotState.Off.value
+            robot.kill()
+
+        # Wait for new states to be published before killing mission
+        rospy.sleep(3)
+        rospy.loginfo('Killing mission')
+        self.process.send_signal(signal.SIGINT)
+        # Don't wait for a clean gazebo shutdown
+        subprocess.call(['killall', '-q', '-9', 'gzclient', 'gzserver'])
+        self.robots = []
+
+    def callback_cmd(self, data: str):
+        if Command.Start.value in data.data:
+            # Start commands are in the format 'start,<sim/reel>[,x,y,yaw]+' so must be split
+            data = data.data.split(',')
+
+            if len(data) % 3 != 2:
+                raise ('Invalid start command')
+            
+            positions = [(0, 0, 0)]
+            for i in range(2, len(data), 3):
+                positions.append((float(data[i]), float(data[i + 1]), float(data[i + 2]) * math.pi/180))
+            if data[1] == MissionType.Simulation.value:
+                self.start_sim(positions)
+            elif data[1] == MissionType.Real.value:
+                self.start_real_mission(positions)
+            else:
+                raise ('Invalid start command')
+
+            for robot in self.robots:
+                robot.state = RobotState.Running.value
+            self.isMissionStarted = True
+
+        elif Command.Stop.value in data.data:
+            # Stop commands are in the format 'stop,<returnToBase>' so must be split
+            data = data.data.split(',')
+
+            if len(data) != 2:
+                raise ('Invalid stop command')
+            
+            return_to_base = data[1].lower() == 'true'
+            self.kill(return_to_base)
+            for robot in self.robots:
+                robot.state = RobotState.Off.value
+            self.isMissionStarted = False
+
+        elif Command.Identify.value in data.data:
+            # Identify commands are in the format 'identify,<robot id>' so must be split
+            data = data.data.split(',')
+
+            if len(data) != 2:
+                raise('Invalid identify command')
+            
+            for robot in self.robots:
+                if robot.id == data[1]:
+                    robot.identify()
+                    return
+            raise('Invalid identify command')
+        else:
+            raise(f'Unknown command {data.data}')
+    
+
+    def publish_periodic_data(self):
+        rate = rospy.Rate(1) # every second (1 Hz)
+        
+        while not rospy.is_shutdown():
+            # Kill mission if all robots are off (low battery)
+            if all(robot.state == RobotState.Off.value for robot in self.robots):
+                self.isMissionStarted = False
+                self.kill(False)
+
+            if self.isMissionStarted:
+                position = [
+                    {
+                        "id": robot.id,
+                        "name": robot.name,
+                        "pos": robot.compute_position(),
+                        "distance": robot.compute_distance(),
+                    }
+                    for robot in self.robots
+                ]
+                self.pub_position.publish(json.dumps(position))
+
+            if len(self.robots) > 0:
+                robot_state = [
+                    {
+                        "id": robot.id,
+                        "name": robot.name,
+                        "state": robot.state,
+                        "type": robot.type,
+                        "battery": robot.battery_percentage,
+                    }
+                    for robot in self.robots
+                ]
+                self.pub_state.publish(json.dumps(robot_state))
+
+            rate.sleep()
+
+
+if __name__ == '__main__':
+    missionManager = None
+    try:
+        missionManager = MissionManager()
+        missionManager.publish_periodic_data()
+    except rospy.ROSInterruptException:
+        pass
+    finally:
+        missionManager.kill(False)

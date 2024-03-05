@@ -1,0 +1,140 @@
+diff --git a/limo_description/urdf/limo_ackerman.gazebo b/limo_description/urdf/limo_ackerman.gazebo
+--- a/limo_description/urdf/limo_ackerman.gazebo
++++ b/limo_description/urdf/limo_ackerman.gazebo
+@@ -43,7 +43,7 @@
+             <robotBaseFrame>base_footprint</robotBaseFrame>
+             <commandTopic>cmd_vel</commandTopic>
+             <torque>50</torque>
+-            <broadcastTF>true</broadcastTF>
++            <broadcastTF>false</broadcastTF>
+             <odometryTopic>odom</odometryTopic>
+             <odometryFrame>odom</odometryFrame>
+             <covariance_x>0.000100</covariance_x>
+diff --git a/limo_description/urdf/limo_gazebo.gazebo b/limo_description/urdf/limo_gazebo.gazebo
+index c6c758a..89941bc 100644
+--- a/limo_description/urdf/limo_gazebo.gazebo
++++ b/limo_description/urdf/limo_gazebo.gazebo
+@@ -55,7 +55,7 @@
+                 </noise>
+               </ray>
+               <plugin name="gazebo_ros_laser_sensor" filename="libgazebo_ros_laser.so">
+-                <topicName>/limo/scan</topicName>
++                <topicName>scan</topicName>
+                 <frameName>laser_link</frameName>
+               </plugin>
+             </sensor>
+@@ -89,11 +89,11 @@
+                 will control the frame rate. -->
+               <updateRate>0.0</updateRate>
+               <cameraName>camera_ir</cameraName>
+-              <imageTopicName>/limo/color/image_raw</imageTopicName>
+-              <cameraInfoTopicName>/limo/color/camera_info</cameraInfoTopicName>
+-              <depthImageTopicName>/limo/depth/image_raw</depthImageTopicName>
+-              <depthImageCameraInfoTopicName>/limo/depth/camera_info</depthImageCameraInfoTopicName>
+-              <pointCloudTopicName>/limo/depth/points</pointCloudTopicName>
++              <imageTopicName>color/image_raw</imageTopicName>
++              <cameraInfoTopicName>color/camera_info</cameraInfoTopicName>
++              <depthImageTopicName>depth/image_raw</depthImageTopicName>
++              <depthImageCameraInfoTopicName>depth/camera_info</depthImageCameraInfoTopicName>
++              <pointCloudTopicName>depth/points</pointCloudTopicName>
+               <frameName>depth_link</frameName>
+               <cameraname>depth_camera_link</cameraname>
+               
+@@ -123,13 +123,14 @@
+           <visualize>true</visualize>
+           <topic>__default_topic__</topic>
+           <plugin filename="libgazebo_ros_imu_sensor.so" name="imu_plugin">
+-            <topicName>/limo/imu</topicName>
++            <topicName>imu</topicName>
+             <bodyName>${frame_prefix}_link</bodyName>
+             <updateRateHZ>100.0</updateRateHZ>
+             <gaussianNoise>0.001</gaussianNoise>
+             <xyzOffset>0 0 0</xyzOffset>
+             <rpyOffset>0 0 0</rpyOffset>
+-            <frameName>imu_link</frameName>
++            <!-- Easiest way to fix https://github.com/ros-simulation/gazebo_ros_pkgs/issues/1063 -->
++            <frameName>$(arg robot_namespace)/imu_link</frameName>
+           </plugin>
+           <pose>0 0 0 0 0 0</pose>
+         </sensor>
+diff --git a/limo_gazebo_sim/src/gazebo_ros_ackerman_drive.cpp b/limo_gazebo_sim/src/gazebo_ros_ackerman_drive.cpp
+index 4ec97f2..157673f 100644
+--- a/limo_gazebo_sim/src/gazebo_ros_ackerman_drive.cpp
++++ b/limo_gazebo_sim/src/gazebo_ros_ackerman_drive.cpp
+@@ -300,8 +300,8 @@ void GazeboRosAckermanDrive::Load(physics::ModelPtr _parent, sdf::ElementPtr _sd
+         boost::bind(&GazeboRosAckermanDrive::CmdVelCallback, this, _1), ros::VoidPtr(), &queue_);
+ 
+     cmd_vel_subscriber_ = rosnode_->subscribe(so);
+-    std::string motor_steer_fr_topic_ = robot_namespace_ + "/limo_fr_steering_hinge_controller/command";
+-    std::string motor_steer_fl_topic_ = robot_namespace_ + "/limo_fl_steering_hinge_controller/command";
++    std::string motor_steer_fr_topic_ = "limo_fr_steering_hinge_controller/command";
++    std::string motor_steer_fl_topic_ = "limo_fl_steering_hinge_controller/command";
+     motor_steer_fr_pub_ = rosnode_->advertise<std_msgs::Float64>(motor_steer_fr_topic_, 50);
+     motor_steer_fl_pub_ = rosnode_->advertise<std_msgs::Float64>(motor_steer_fl_topic_, 50);
+     odometry_publisher_ = rosnode_->advertise<nav_msgs::Odometry>(odometry_topic_, 1);
+diff --git a/limo_bringup/launch/limo_start.launch b/limo_bringup/launch/limo_start.launch
+index c7919dc..9636a93 100644
+--- a/limo_bringup/launch/limo_start.launch
++++ b/limo_bringup/launch/limo_start.launch
+@@ -10,7 +10,7 @@
+         <arg name="use_mcnamu" default="$(arg use_mcnamu)" />
+     </include>
+ 
+-    <include file="$(find ydlidar_ros)/launch/X2L.launch" />
++    <include file="$(find ydlidar_ros_driver)/launch/X2.launch" />
+ 
+     <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser_link" args="0.105 0.0 0.08 0.0 0.0 0.0 /base_link /laser_link 10" />
+     <node pkg="tf" type="static_transform_publisher" name="base_link_to_imu_link" args="0.0 0.0 0.0 0.0 0.0 0.0 /base_link /imu_link 10" />
+diff --git a/limo_base/include/limo_driver.h b/limo_base/include/limo_driver.h
+index da22c0c..f9e3ba3 100644
+--- a/limo_base/include/limo_driver.h
++++ b/limo_base/include/limo_driver.h
+@@ -78,6 +78,7 @@ private:
+ 
+     std::string odom_frame_;
+     std::string base_frame_;
++    std::string imu_frame_;
+     bool pub_odom_tf_ = false;
+     bool use_mcnamu_ = false;
+ 
+diff --git a/limo_base/launch/limo_base.launch b/limo_base/launch/limo_base.launch
+index 7c0f6f9..df65d05 100644
+--- a/limo_base/launch/limo_base.launch
++++ b/limo_base/launch/limo_base.launch
+@@ -5,6 +5,7 @@
+     <arg name="port_name" default="ttyTHS1" />
+     <arg name="odom_frame" default="odom" />
+     <arg name="base_frame" default="base_link" />
++    <arg name="imu_frame" default="imu_link" />
+     <arg name="use_mcnamu" default="false" />
+     <arg name="pub_odom_tf" default="false" />
+ 
+@@ -12,6 +13,7 @@
+         <param name="port_name" value="$(arg port_name)" />
+         <param name="odom_frame" value="$(arg odom_frame)" />
+         <param name="base_frame" value="$(arg base_frame)" />
++        <param name="imu_frame" value="$(arg imu_frame)" />
+         <param name="use_mcnamu" value="$(arg use_mcnamu)" />
+         <param name="pub_odom_tf" value="$(arg pub_odom_tf)" />
+     </node>
+diff --git a/limo_base/src/limo_driver.cpp b/limo_base/src/limo_driver.cpp
+index b0427d5..5bf1087 100644
+--- a/limo_base/src/limo_driver.cpp
++++ b/limo_base/src/limo_driver.cpp
+@@ -40,6 +40,7 @@ LimoDriver::LimoDriver()  {
+     private_nh.param<std::string>("port_name", port_name, std::string("ttyTHS1"));
+     private_nh.param<std::string>("odom_frame", odom_frame_, std::string("odom"));
+     private_nh.param<std::string>("base_frame", base_frame_, std::string("base_link"));
++    private_nh.param<std::string>("imu_frame", imu_frame_, std::string("imu_link"));
+     private_nh.param<bool>("pub_odom_tf", pub_odom_tf_, false);
+     private_nh.param<bool>("use_mcnamu", use_mcnamu_, false);
+ 
+@@ -383,7 +384,7 @@ void LimoDriver::publishIMUData(double stamp) {
+     sensor_msgs::Imu imu_msg;
+        
+     imu_msg.header.stamp = ros::Time(stamp);
+-    imu_msg.header.frame_id = "imu_link";
++    imu_msg.header.frame_id = imu_frame_;
+ 
+     imu_msg.linear_acceleration.x = imu_data_.accel_x;
+     imu_msg.linear_acceleration.y = imu_data_.accel_y;

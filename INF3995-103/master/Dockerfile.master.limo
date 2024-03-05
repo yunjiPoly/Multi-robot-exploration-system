@@ -1,0 +1,74 @@
+FROM arm64v8/ros:noetic
+RUN apt-get update -y && apt-get install -y \
+  curl alsa-utils psmisc vim git
+
+RUN apt-get update -y && apt-get install -y \
+  ros-noetic-roslint \
+  ros-noetic-ros-control \
+  ros-noetic-ros-controllers \
+  ros-noetic-move-base \
+  ros-noetic-navigation \
+  ros-noetic-explore-lite \
+  ros-noetic-teb-local-planner \
+  ros-noetic-joint-state-publisher-gui \
+  ros-noetic-rqt-robot-steering \
+  ros-noetic-robot-pose-ekf \
+  ros-noetic-teleop-twist-keyboard xterm
+
+# Source ROS and cartographer
+RUN echo "\nsource /opt/ros/\$ROS_DISTRO/setup.bash" >> ~/.bashrc
+RUN apt-get -y update && apt-get install -y python3-wstool python3-rosdep ninja-build stow
+
+# Install YDLidar
+RUN git clone https://github.com/YDLIDAR/YDLidar-SDK.git /ydlidar
+WORKDIR /ydlidar/build
+RUN cmake ..
+RUN make
+RUN sudo make install
+
+WORKDIR /catkin_ws
+
+# Install cartographer source
+RUN wstool init src && \
+  wstool merge -t src https://raw.githubusercontent.com/cartographer-project/cartographer_ros/master/cartographer_ros.rosinstall && \
+  wstool update -t src
+# https://github.com/cartographer-project/cartographer_ros/pull/1745
+RUN sed -i -e "s%<depend>libabsl-dev</depend>%<\!--<depend>libabsl-dev</depend>-->%g" src/cartographer/package.xml
+RUN DEBIAN_FRONTEND=noninteractive bash -c 'source /ros_entrypoint.sh && \
+  apt-get update -y && \
+  rosdep update && \
+  rosdep install --from-paths src --ignore-src --rosdistro=${ROS_DISTRO} -y'
+RUN apt-get update -y && apt-get install -y libgrpc++-dev libgrpc-dev
+RUN src/cartographer/scripts/install_abseil.sh \
+  && src/cartographer/scripts/install_async_grpc.sh
+
+# Install lidar sources
+RUN git clone https://github.com/YDLIDAR/ydlidar_ros_driver.git src/ydlidar_ros
+RUN apt-get update -y && apt-get install -y libgmock-dev
+
+# Install agilex sources
+RUN mkdir -p src && \
+  git clone --branch=master --depth=1 https://github.com/agilexrobotics/limo_ros src/limo_ros
+# Fix bugs in limo_description
+COPY ./limo_description_real.patch .
+RUN git apply limo_description_real.patch --directory src/limo_ros
+RUN wc -l src/limo_ros/../ydlidar_ros/CMakeLists.txt
+# Fix CMake files
+COPY ./cmakes.limo.patch .
+RUN git apply cmakes.limo.patch --unsafe-paths --directory src/limo_ros
+
+# Build deps
+RUN apt-get update -y && rosdep install --from-paths src --ignore-src -r -y
+RUN bash -c 'source /ros_entrypoint.sh && \
+  catkin_make_isolated --install --use-ninja -DBUILD_GRPC=ON'
+# Source Cartographer
+RUN echo "source /catkin_ws/install_isolated/setup.bash" >> ~/.bashrc
+
+# Build own files
+WORKDIR /inf3995_ws
+COPY ./src/package.xml src/server/package.xml
+RUN apt-get update -y && rosdep install --from-paths src --ignore-src -r -y
+COPY ./src /inf3995_ws/src/server/
+RUN bash -c 'source /ros_entrypoint.sh && source /catkin_ws/install_isolated/setup.bash && catkin_make'
+RUN echo "source /inf3995_ws/devel/setup.bash" >> ~/.bashrc
+CMD bash

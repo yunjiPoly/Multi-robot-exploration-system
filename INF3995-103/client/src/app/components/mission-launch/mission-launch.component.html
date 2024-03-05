@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+<div class="mission_launch">
+  <div class="command_container">
+    <ng-container *ngIf="!this.getIsMissionOngoing()">
+      <mat-slide-toggle class="command_container command_container__toggle" [(ngModel)]="simToggle" color="primary">En simulation</mat-slide-toggle>
+      <button (click)="openCreatePositionDialog()" class="command_container__button command_container__button--green">
+        <i class="material-symbols-outlined">
+            rocket_launch
+        </i>
+        <span>Lancer la mission</span>
+      </button>
+    </ng-container>
+    <ng-container *ngIf="this.getIsMissionOngoing()">
+      <button (click)="goToMissionPage()" class="command_container__button command_container__button--green">
+        <i class="material-symbols-outlined">
+            travel_explore
+        </i>
+        <span>Voir la mission en cours</span>
+      </button>
+    </ng-container>
+      
+      <button class="command_container__button command_container__button--blue" (click)="goToHistory()">
+        <i class="material-symbols-outlined">
+          history
+        </i>
+        <span>Historique des missions</span>
+      </button>
+    </div>
+</div>

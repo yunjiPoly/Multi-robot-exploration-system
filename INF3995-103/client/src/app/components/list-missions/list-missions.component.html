@@ -1,0 +1,80 @@
+<div class="missions-history-page">
+  <h1>Historique des missions</h1>
+  <div class="missions-list">
+    <mat-card>
+      <mat-expansion-panel disabled hideToggle class="panel">
+        <mat-expansion-panel-header class="panel__header">
+          <mat-panel-description class="panel__header__title" (click)="sortById()">ID
+            <mat-icon *ngIf="sortingStatuses.get('id') === null" class="icon--invisible">expand_more</mat-icon>
+            <mat-icon *ngIf="sortingStatuses.get('id') === true">expand_more</mat-icon>
+            <mat-icon *ngIf="sortingStatuses.get('id') === false">expand_less</mat-icon>
+          </mat-panel-description>
+          <mat-panel-description class="panel__header__title" (click)="sortByType()">Type
+            <mat-icon *ngIf="sortingStatuses.get('type') === null" class="icon--invisible">expand_more</mat-icon>
+            <mat-icon *ngIf="sortingStatuses.get('type') === true">expand_more</mat-icon>
+            <mat-icon *ngIf="sortingStatuses.get('type') === false">expand_less</mat-icon>
+          </mat-panel-description>
+          <mat-panel-description class="panel__header__title">Robots</mat-panel-description>
+          <mat-panel-description class="panel__header__title" (click)="sortByDate()">Date
+            <mat-icon *ngIf="sortingStatuses.get('date') === null" class="icon--invisible">expand_more</mat-icon>
+            <mat-icon *ngIf="sortingStatuses.get('date') === true">expand_more</mat-icon>
+            <mat-icon *ngIf="sortingStatuses.get('date') === false">expand_less</mat-icon>
+          </mat-panel-description>
+          <mat-panel-description class="panel__header__title" (click)="sortByTime()">Temps (s)
+            <mat-icon *ngIf="sortingStatuses.get('time') === null" class="icon--invisible">expand_more</mat-icon>
+            <mat-icon *ngIf="sortingStatuses.get('time') === true">expand_more</mat-icon>
+            <mat-icon *ngIf="sortingStatuses.get('time') === false">expand_less</mat-icon>
+          </mat-panel-description>
+          <mat-panel-description class="panel__header__title" (click)="sortByDistance()">Distance pacourue (m)
+            <mat-icon *ngIf="sortingStatuses.get('distance') === null" class="icon--invisible">expand_more</mat-icon>
+            <mat-icon *ngIf="sortingStatuses.get('distance') === true">expand_more</mat-icon>
+            <mat-icon *ngIf="sortingStatuses.get('distance') === false">expand_less</mat-icon>
+          </mat-panel-description>
+        </mat-expansion-panel-header>
+      </mat-expansion-panel>
+
+      <mat-accordion multi="true">
+        <mat-expansion-panel class="panel" hideToggle *ngFor="let missions of missions">
+          <mat-expansion-panel-header>
+            <mat-panel-description class="panel__description">
+              {{missions.id}}
+            </mat-panel-description>
+            <mat-panel-description class="panel__description">
+              {{missions.type}}
+            </mat-panel-description>
+            <mat-panel-description class="panel__description">
+              
+              <pre>{{missions.robots}}</pre>
+            </mat-panel-description>
+            <mat-panel-description class="panel__description">
+              {{missions.date.toLocaleDateString()}}<br>
+              {{missions.date.toLocaleTimeString()}}
+            </mat-panel-description>
+            <mat-panel-description class="panel__description">
+              {{missions.time}}
+            </mat-panel-description>
+            <mat-panel-description class="panel__description">
+              {{missions.distance}}
+            </mat-panel-description>
+          </mat-expansion-panel-header>
+  
+  
+        <div class="panel panel__expansion">
+          <img #image [src]="missions.mapSrc" class="map">
+
+          <div class="scroll_box panel__expansion__logs" #scrollMe>
+            <pre>{{missions.logs}}</pre>
+          </div>
+        </div>
+
+        </mat-expansion-panel>
+      </mat-accordion>
+    </mat-card>
+  </div>
+</div>
+
+
+<ng-template #notsorted>
+  <mat-icon>expand_less</mat-icon>
+</ng-template>
+

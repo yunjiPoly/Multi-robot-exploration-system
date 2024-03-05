@@ -1,0 +1,60 @@
+<div class="dialog-container">
+    <h2 mat-dialog-title>Spécifier les positions et l'orientation initiales des robots</h2>
+    <p class="info">Le robot 1 est situé en [0, 0] avec une orientation initiale de 0.</p>
+    <p class="description">Les coordonnées en x et en y de l'origine (en mètres) doivent être situées dans l'intervalle [-5, 5].</p>
+    <p class="description">L'orientation (en degrés) doit être située dans l'intervalle [-180, 180].</p>
+    <div class="container">
+        <form [formGroup]="formParameters" class="inner-container" (ngSubmit)="setInitialPositions()">
+            <div class="input-container">
+                <p class="label">Choisissez la position et l'orientation initiale du robot 2 <u>par rapport au robot 1</u> :</p>
+                <div class="origin-container">
+                    <mat-form-field>
+                        <mat-label>Décalage en X</mat-label>
+                        <input
+                        matInput
+                        type="number"
+                        formControlName="originX2"
+                        autocomplete="off"
+                        />
+                    </mat-form-field>
+                    <mat-form-field>
+                        <mat-label>Décalage en Y</mat-label>
+                        <input
+                        matInput
+                        type="number"
+                        formControlName="originY2"
+                        autocomplete="off"
+                        />  
+                    </mat-form-field>
+                    <mat-form-field>
+                        <mat-label>Orientation</mat-label>
+                        <input
+                        matInput
+                        type="number"
+                        step="45"
+                        formControlName="orientation2"
+                        autocomplete="off"
+                        />  
+                    </mat-form-field>
+                </div>
+                <mat-error>
+                    <span *ngIf="this.formParameters.get('originX2')?.invalid || this.formParameters.get('originY2')?.invalid">Les coordonnées en x et en y de l'origine de la zone de sécurité doivent être entre [-5, 5].</span>
+                    <span *ngIf="this.formParameters.get('orientation2')?.invalid">L'orientation initiale doit être entre [-180, 180].</span>
+                    <span *ngIf="this.formParameters.hasError('distanceTooSmall')">La distance du robot 2 par rapport au robot 1 doit être d'au moins 50 cm.</span>
+                </mat-error>
+            </div>
+            <div class="buttons-container">
+                <button mat flat button mat-button color="primary" type="button" (click)="closeDialog()">
+                    <mat-icon>not_interested</mat-icon>
+                    Annuler
+                </button> 
+                <button mat-flat-button color="primary" type="submit" [disabled]="this.formParameters.invalid">
+                    <mat-icon class="material-symbols-outlined">rocket_launch</mat-icon>
+                    Démarrer la mission
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+    
+

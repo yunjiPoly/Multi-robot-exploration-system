@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="rviz" default="true" />
+
+    <include file="$(find master)/launch/cartographer.launch"></include>
+
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find master)/config/model_display.rviz" if="$(arg rviz)" />
+
+    <!-- limo_real.launch files are started directly by the controller -->
+</launch>

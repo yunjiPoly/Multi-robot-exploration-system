@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="robot_namespace" default="/"/>
+    <arg name="cmd_vel_rot" default="true"/>
+
+    <!-- initial pose -->
+    <arg name="x" default="0.0"/>
+    <arg name="y" default="0.0"/>
+    <arg name="yaw" default="0.0"/>
+
+    <arg name="server_ip" default="localhost"/>
+
+    <param name="tf_prefix" value="$(arg robot_namespace)" />
+    <param name="cartographer_config" command="sed 's/TF_PREFIX/$(arg robot_namespace)/g' $(find master)/config/cartographer-node.lua" />
+
+    <!-- Note: first robot must be spawned at (0, 0) -->
+    <arg name="needs_not_move" value="$(eval 'true' if arg('x') == 0 and arg('y') == 0 and arg('yaw') == 0 else 'false')"/>
+    <node name="cartographer_node" pkg="cartographer_ros"
+        type="cartographer_grpc_node" args="
+            -client_id $(arg robot_namespace)
+            -start_trajectory_with_default_topics=$(arg needs_not_move)
+            -server_address $(arg server_ip):50051
+            -configuration_directory $(find master)/config
+            -configuration_basename cartographer-node-$(arg robot_namespace).lua"
+            launch-prefix="/bin/bash -c 'rosparam get /$(arg robot_namespace)/cartographer_config -p > $(find master)/config/cartographer-node-$(arg robot_namespace).lua; $*' -- ">
+        <remap from="points2" to="depth/points" />
+    </node>
+    <!-- Convert from yaw to quaternions using yaw => [0, 0, sin(yaw/2), cos(yaw/2)] -->
+    <arg name="quaternions" value="$(eval f'{{x: 0.0, y: 0.0, z: {sin(arg(&quot;yaw&quot;) / 2)}, w: {cos(arg(&quot;yaw&quot;) / 2)}}}')" />
+    <!-- Launch prefix needed to wait for cartographer to initialize before starting other trajectory -->
+    <node name="cartographer_start" pkg="rosservice" type="rosservice" args="
+        call --wait
+        /$(arg robot_namespace)/start_trajectory
+        &quot;{
+            configuration_directory: '$(find master)/config',
+            configuration_basename: 'cartographer-node-$(arg robot_namespace).lua',
+            use_initial_pose: true,
+            initial_pose: {
+                position: {x: $(arg x), y: $(arg y), z: 0.0},
+                orientation: $(arg quaternions)
+            },
+            relative_to_trajectory_id: 0
+        }&quot;"
+        unless="$(arg needs_not_move)"
+        launch-prefix="/bin/bash -c 'rostopic echo /map -n 1 > /dev/null ; exec &quot;$@&quot;' -- "
+    />
+
+    <!-- use robot pose ekf to provide odometry-->
+    <node pkg="robot_pose_ekf" name="robot_pose_ekf" type="robot_pose_ekf">
+        <param name="output_frame" value="odom" />
+        <param name="base_footprint_frame" value="base_link"/>
+        <remap from="imu_data" to="imu" />
+    </node>
+    <node name="movebase" pkg="move_base" type="move_base">
+        <rosparam file="$(find master)/config/common_costmap.yml" command="load" ns="global_costmap" />
+        <rosparam file="$(find master)/config/common_costmap.yml" command="load" ns="local_costmap" />
+        <rosparam file="$(find master)/config/local_costmap.yml" command="load" subst_value="True" />
+        <rosparam file="$(find master)/config/global_costmap.yml" command="load" subst_value="True" />
+        <rosparam file="$(find master)/config/teb_local_planner.yml" command="load" subst_value="True" />
+
+        <param name="base_global_planner" value="global_planner/GlobalPlanner" />
+        <param name="base_local_planner" value="teb_local_planner/TebLocalPlannerROS" />
+        <param name="controller_frequency" value="5.0" />
+        <param name="clearing_rotation_allowed" value="false" /> <!-- Our carlike robot is not able to rotate in place -->
+    </node>
+
+    <node name="map_remap" pkg="master" type="map-remap">
+        <remap from="map" to="movebase/global_costmap/costmap" />
+        <remap from="map_updates" to="movebase/global_costmap/costmap_updates" />
+        <remap from="remap" to="explorelite/costmap" />
+        <remap from="remap_updates" to="explorelite/costmap_updates" />
+    </node>
+
+    <node name="explorelite" pkg="explore_lite" type="explore" if="true">
+        <param name="visualize" value="true"/>
+        <param name="min_frontier_size" value="0.2"/>
+
+        <remap from="costmap" to="explorelite/costmap" />
+        <remap from="costmap_updates" to="explorelite/costmap_updates" />
+    </node>
+</launch>

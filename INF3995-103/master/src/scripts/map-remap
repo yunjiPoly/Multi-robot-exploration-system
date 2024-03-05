@@ -1,0 +1,87 @@
+#!/usr/bin/python3
+import rospy
+import json
+import numpy as np
+from nav_msgs.msg import OccupancyGrid, MapMetaData
+from map_msgs.msg import OccupancyGridUpdate
+from rospy.numpy_msg import numpy_msg
+
+# Cartographer outputs data from range 0 to 100 based upon probability of obstacle
+# explore_lite expects -1 = unknown, 0 = free, 100 = obstacle
+# This script converts from one map type to the other
+
+ENDPOINT_SECURITY_ZONE = '/security_zone'
+
+OBSTACLE = 100
+FREE = 0
+UNKNOWN = -1
+
+OBSTACLE_THRESHOLD = 75
+FREE_THRESHOLD = 50
+
+class SecurityZone():
+    def __init__(self):
+        self.active = False
+        self.zone_origin_m = None
+        self.zone_dimensions_m = None
+
+    def dimensions(self, data: MapMetaData):
+        if data.width == 0 or data.height == 0:
+            self.active = False
+        else:
+            self.active = True
+
+            # Extract the zone_origin and zone_dimensions lists from the security_zone_data dictionary
+            self.zone_origin_m = data.origin.position
+            self.zone_dimensions_m = [data.width, data.width]
+
+    def map(self, cmap: OccupancyGrid):
+        if not self.active: return cmap
+
+        origin_tf = cmap.info.origin.position
+        resolution = cmap.info.resolution
+        # Convert the security zone origin and dimensions to grid coordinates (same resolution)
+        zone_origin = [(self.zone_origin_m.x - origin_tf.x) / resolution, (self.zone_origin_m.y - origin_tf.y) / resolution]
+        zone_dimensions = [self.zone_dimensions_m[0] / resolution, self.zone_dimensions_m[1] / resolution]
+
+        self.min_x = max(int(round(zone_origin[0] - zone_dimensions[0] / 2)), 0)
+        self.max_x = min(int(round(zone_origin[0] + zone_dimensions[0] / 2)), cmap.info.width)
+        self.min_y = max(int(round(zone_origin[1] - zone_dimensions[1] / 2)), 0)
+        self.max_y = min(int(round(zone_origin[1] + zone_dimensions[1] / 2)), cmap.info.height)
+
+        # Convert the occupancy grid data to a numpy array with correct shape for easier manipulation
+        grid_data = cmap.data.copy()
+        grid_data.shape = (cmap.info.height, cmap.info.width)
+        grid_data[:self.min_y,:] = OBSTACLE
+        grid_data[self.max_y:,:] = OBSTACLE
+        grid_data[:,:self.min_x] = OBSTACLE
+        grid_data[:,self.max_x:] = OBSTACLE
+        grid_data.shape = cmap.data.shape
+        cmap.data = grid_data
+
+        return cmap
+
+    def map_update(self, cmap: OccupancyGridUpdate):
+        if not self.active: return cmap
+
+        # Convert the occupancy grid data to a numpy array with correct shape for easier manipulation
+        grid_data = cmap.data.copy()
+        grid_data.shape = (cmap.height, cmap.width)
+        if cmap.y < self.min_y: grid_data[:self.min_y - cmap.y,:] = OBSTACLE
+        if cmap.y < self.max_y: grid_data[self.max_y - cmap.y:,:] = OBSTACLE
+        if cmap.x < self.min_x: grid_data[:,:self.min_x - cmap.x] = OBSTACLE
+        if cmap.x < self.max_x: grid_data[:,self.max_x - cmap.x:] = OBSTACLE
+        grid_data.shape = cmap.data.shape
+        cmap.data = grid_data
+
+        return cmap
+
+rospy.init_node('map_remap_node', anonymous=True)
+pub = rospy.Publisher('remap', numpy_msg(OccupancyGrid), queue_size=1)
+pub_updates = rospy.Publisher('remap_updates', numpy_msg(OccupancyGridUpdate), queue_size=1)
+security_zone = SecurityZone()
+rospy.Subscriber('map', numpy_msg(OccupancyGrid), lambda map: pub.publish(security_zone.map(map)))
+rospy.Subscriber('map_updates', numpy_msg(OccupancyGridUpdate), lambda map: pub_updates.publish(security_zone.map_update(map)))
+rospy.Subscriber(ENDPOINT_SECURITY_ZONE, MapMetaData, lambda dims: security_zone.dimensions(dims))
+
+rospy.spin()

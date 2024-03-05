@@ -1,0 +1,18 @@
+<div class="robot_state">
+    <div class="robot_state__text">
+        <p>Type du robot : {{robot.type}}</p>
+        <p>État du robot : {{robot.state}}</p>
+        <p *ngIf="!this.getIsSim()">Batterie du robot : {{robot.battery}} %</p>
+    </div>
+    <span class="robot_state_buttons">
+        <div class = "robot_state__battery">
+            <button (click)="identify()" class="robot_state__button robot_state__button--regular" [style.background-color]="color">Identifier</button>
+            <ng-container *ngIf="!this.getIsSim()">
+                <img *ngIf="robot.battery < 33" src="../../assets/images/battery-0.svg" class="battery">
+                <img *ngIf="robot.battery > 32 && robot.battery < 66" src="../../assets/images/battery-33.svg" class="battery">
+                <img *ngIf="robot.battery > 65 && robot.battery < 95" src="../../assets/images/battery-66.svg" class="battery">
+                <img *ngIf="robot.battery > 94" src="../../assets/images/battery-90.svg" class="battery">
+            </ng-container>
+        </div>
+    </span>
+</div>

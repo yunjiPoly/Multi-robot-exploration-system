@@ -1,0 +1,129 @@
+#!/usr/bin/env python
+
+from math import sqrt, cos, sin, pi
+import random
+from string import Template
+from os import path
+
+import rospy
+from gazebo_msgs.srv import SpawnModel
+from geometry_msgs.msg import Pose, Point, Quaternion
+import tf
+
+REFERENCE_FRAME = 'world'
+DEADZONE = 0.4 # Don't spawn walls less than 0.5m around origin
+ARENA_SIZE = 10
+
+# Does the line segment intersects the circle of given radius
+#
+# (x, y) = p1 + t * p2
+# x² + y² = R²
+#
+# (p1.x + t * p2.x)² + (p1.y + t * p2.y)² = R²
+# t² * (p2.x² + p2.y²) + t * (2 * p1.x * p2.x + 2 * p1.y * p2.y) + (p1.x² + p1.y² - R²) = 0
+# at² + bt + c = 0
+# Intersects (real solutions) if b² - 4ac >= 0
+def intersects(radius, p1, p2):
+    a = p2[0]**2 + p2[1]**2
+    b_2 = p1[0] * p2[0] + p1[1] * p2[1]
+    c = p1[0]**2 + p1[1]**2 - radius**2
+
+    disc_4 = b_2**2 - a * c
+    if disc_4 < 0: return False # No solutions
+
+    # Check that t is between 0 and 1
+    sqrtdisc_2a = sqrt(disc_4) / a
+    t1 = -b_2 / a - sqrtdisc_2a
+    t2 = -b_2 / a + sqrtdisc_2a
+    return (t1 >= 0 and t1 <= 1) or (t2 >= 0 and t2 <= 1)
+
+# 4 corners of a rectangle rotated by angle, centered around (x, y)
+#
+# Initial corners: (w/2, h/2), (-w/2, h/2), (-w/2, -h/2), (w/2, -h/2)
+# Rotation by [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]
+# Translate center to (x, y)
+def corners(width, depth, x, y, angle):
+    w_cos = (width / 2) * cos(angle)
+    w_sin = (width / 2) * sin(angle)
+    h_cos = (depth / 2) * cos(angle)
+    h_sin = (depth / 2) * sin(angle)
+
+    return (
+        (x + w_cos - h_sin, y + w_sin + h_cos),
+        (x - w_cos - h_sin, y - w_sin + h_cos),
+        (x - w_cos + h_sin, y - w_sin - h_cos),
+        (x + w_cos + h_sin, y + w_sin - h_cos),
+    )
+
+model_template = ''
+def spawn_wall(width, depth, x, y, yaw, name):
+    global model_template
+    # Set model name and reference frame
+    model_name = 'wall-{}'.format(name)
+
+    # Set model pose and orientation
+    position = Point(x, y, 0.0)
+    orientation = Quaternion(
+        *tf.transformations.quaternion_from_euler(0.0, 0.0, yaw)
+    )
+    pose = Pose(position, orientation)
+
+    # Call spawn_model service to spawn wall
+    rospy.wait_for_service("gazebo/spawn_sdf_model")
+    spawn_model = rospy.ServiceProxy('/gazebo/spawn_sdf_model', SpawnModel)
+    model_xml = model_template.substitute({ "width": width, "depth": depth })
+    resp = spawn_model(model_name, model_xml, '', pose, REFERENCE_FRAME)
+    rospy.loginfo("wall generated")
+
+def spawn_walls():
+    global model_template
+
+    # Initialize ROS node
+    rospy.init_node('spawn_walls')
+
+    # Load wall model from Gazebo models
+    with open(path.join(path.dirname(path.realpath(__file__)), "../wall/wall.sdf"), 'r') as model_file:
+        model_template = Template(model_file.read())
+
+    # Set spawn position and orientation limits
+    x_limits = [-ARENA_SIZE/2, ARENA_SIZE/2]
+    y_limits = [-ARENA_SIZE/2, ARENA_SIZE/2]
+    yaw_limits = [-pi, pi]
+
+    # get a random amount of walls to spawn between 3 and 10 inclusive
+    num_walls = random.randint(3, 10)
+
+    # Gen outer walls
+    spawn_wall(ARENA_SIZE, 0.2,  0,  ARENA_SIZE/2, 0,    "north")
+    spawn_wall(ARENA_SIZE, 0.2,  ARENA_SIZE/2,  0, pi/2, "west")
+    spawn_wall(ARENA_SIZE, 0.2,  0, -ARENA_SIZE/2, 0,    "south")
+    spawn_wall(ARENA_SIZE, 0.2, -ARENA_SIZE/2,  0, pi/2, "east")
+
+    # Spawn walls randomly
+    for i in range(num_walls):
+        while True: # until no intersection
+            # Generate random position and orientation
+            x = random.uniform(*x_limits)
+            y = random.uniform(*y_limits)
+            yaw = random.uniform(*yaw_limits)
+
+            # Generate random width and depth
+            width = random.uniform(0.5, 3.0)
+            depth = random.uniform(0.1, 0.5)
+
+            # verify it's out of deadzone
+            p1, p2, p3, p4 = corners(width, depth, x, y, yaw)
+            if intersects(DEADZONE, p1, p2) \
+                or intersects(DEADZONE, p2, p3) \
+                or intersects(DEADZONE, p3, p4) \
+                or intersects(DEADZONE, p4, p1):
+                continue
+
+            spawn_wall(width, depth, x, y, yaw, i)
+            break
+
+if __name__ == '__main__':
+    try:
+        spawn_walls()
+    except rospy.ROSInterruptException:
+        pass

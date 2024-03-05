@@ -1,0 +1,39 @@
+# Exclusion des dépendences du projet. Elles peuvent être regénérées
+# automatiquement.
+node_modules/
+false/
+
+src/logs/
+src/maps/
+src/database/
+
+# Exclusion des fichiers Javascripts
+build/
+devel/
+.catkin_workspace
+
+# NPM Debug Log
+npm-debug.log
+
+##Typescrit compilation ##
+
+*.js.map
+*.js
+
+# Exclusion des fichiers SQLite
+
+*.sqlite
+
+# Exclusion des maps
+src/map/*.png
+
+# Garder les fichiers necessaires pour les tests
+!systemjs.config.js
+!karma.conf.js
+!karma-test-shim.js
+!systemjs.config.extras.js
+!tsconfig.app.json
+!tsconfig.spec.json
+!tsconfig.json
+!package-lock.json
+

@@ -1,0 +1,15 @@
+<mat-toolbar [ngClass]="['header']">
+    <div class="header__container container--no-pad">
+        <div class="header__items-container">
+            <span *ngFor="let item of items" class="header__item" [ngClass]="[(item.active ? 'header__item--active' : '')]">
+                <a 
+                    routerLink="{{ item.active ? null : item.path }}"
+                >{{ item.title }}</a>
+            </span>
+        </div>
+        <div>
+            <span class="header__title">Projet CartoRovers
+            </span>
+        </div>
+    </div>
+</mat-toolbar>

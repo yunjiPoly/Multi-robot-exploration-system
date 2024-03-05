@@ -1,0 +1,50 @@
+@import '../../../styles.scss';
+
+.map {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+
+  h1 {
+    font-weight: 500;
+    font-size: 2em;
+    @media screen and (max-width: 575px) {
+      font-size: 1.5em;
+      margin-bottom: 5px;
+    }
+  }
+  
+  &__info {
+    display: inline-block;
+    font-size: 24px;
+    margin-right: 5px;
+    vertical-align: middle;
+    &:hover + .tooltip-text{
+      display: initial;
+    }
+  }
+
+  &__canvas {
+    width: 100%;
+    max-height: min(525px, 90%);
+    max-width: 525px;
+
+    @media screen and (max-width: 500px) {
+      height: min(350px, 100%) !important;
+      max-width: 350px;
+    }
+  }
+}
+
+.tooltip-text {
+  display: none;
+  position: absolute;
+  background-color: $color2;
+  color: $color6;
+  z-index: 10;
+  padding: 5px;
+  border-radius: 5px;
+  font-size: 0.5em;
+  line-height: 1em;
+}

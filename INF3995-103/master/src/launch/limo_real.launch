@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="robot_namespace" default="limo1"/>
+    <arg name="ip" default="192.168.1.130"/>
+    <arg name="server_ip" default="localhost"/>
+
+    <!-- initial pose -->
+    <arg name="x" default="0.0"/>
+    <arg name="y" default="0.0"/>
+    <arg name="yaw" default="0.0"/>
+
+    <group ns="$(arg robot_namespace)">
+        <param name="tf_prefix" value="$(arg robot_namespace)" />
+
+        <machine name="$(arg robot_namespace)" address="$(arg ip)" user="agilex" password="agx" timeout="30.0" env-loader="/home/agilex/inf3995-103-setup.sh" default="true" />
+
+        <include file="$(find master)/launch/limo_control.launch">
+            <arg name="robot_namespace" value="$(arg robot_namespace)"/>
+            <arg name="x" value="$(arg x)"/>
+            <arg name="y" value="$(arg y)"/>
+            <arg name="yaw" value="$(arg yaw)"/>
+            <arg name="server_ip" value="$(arg server_ip)"/>
+            <arg name="cmd_vel_rot" value="false"/>
+        </include>
+
+        <!-- Agilex exports the wrong topic -->
+        <remap from="/cmd_vel" to="cmd_vel"/>
+        <remap from="/limo_status" to="limo_status"/>
+        <remap from="/imu" to="imu"/>
+        <remap from="/odom" to="odom"/>
+
+        <node name="identify" pkg="master" type="identify">
+            <param name="alsa_opts" value="-D plughw:2,0"/>
+        </node>
+
+        <include file="$(find limo_base)/launch/limo_base.launch">
+            <arg name="port_name" value="ttyTHS1" />
+            <arg name="use_mcnamu" value="false" />
+            <arg name="pub_odom_tf" value="false" />
+            <arg name="odom_frame" value="/$(arg robot_namespace)/odom" />
+            <arg name="base_frame" value="/$(arg robot_namespace)/base_link" />
+            <arg name="imu_frame" value="$(arg robot_namespace)/imu_link" />
+        </include>
+
+        <node name="ydlidar_lidar_publisher"  pkg="ydlidar_ros_driver"  type="ydlidar_ros_driver_node" respawn="false" >
+            <!-- string property -->
+            <param name="port"         type="string" value="/dev/ydlidar"/>  
+            <param name="frame_id"     type="string" value="$(arg robot_namespace)/laser_link"/>
+            <param name="ignore_array"     type="string" value=""/>
+
+            <!-- int property -->
+            <param name="baudrate"         type="int" value="115200"/>  
+            <!-- 0:TYPE_TOF, 1:TYPE_TRIANGLE, 2:TYPE_TOF_NET -->
+            <param name="lidar_type"       type="int" value="1"/>  
+            <!-- 0:YDLIDAR_TYPE_SERIAL, 1:YDLIDAR_TYPE_TCP -->
+            <param name="device_type"         type="int" value="0"/>  
+            <param name="sample_rate"         type="int" value="3"/>  
+            <param name="abnormal_check_count"         type="int" value="4"/>  
+
+            <!-- bool property -->
+            <param name="resolution_fixed"    type="bool"   value="true"/>
+            <param name="auto_reconnect"    type="bool"   value="true"/>
+            <param name="reversion"    type="bool"   value="false"/>
+            <param name="inverted"    type="bool"   value="true"/>
+            <param name="isSingleChannel"    type="bool"   value="true"/>
+            <param name="intensity"    type="bool"   value="false"/>
+            <param name="support_motor_dtr"    type="bool"   value="true"/>
+            <param name="invalid_range_is_inf"    type="bool"   value="false"/>
+            <param name="point_cloud_preservative"    type="bool"   value="false"/>
+
+            <!-- float property -->
+            <param name="angle_min"    type="double" value="-180" />
+            <param name="angle_max"    type="double" value="180" />
+            <param name="range_min"    type="double" value="0.1" />
+            <param name="range_max"    type="double" value="12.0" />
+            <!-- frequency is invalid, External PWM control speed -->
+            <param name="frequency"    type="double" value="10.0"/>
+        </node>
+
+        <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser_link" args="0.105 0.0 0.08 0.0 0.0 1.0 0.0 /$(arg robot_namespace)/base_link /$(arg robot_namespace)/laser_link 10" />
+        <node pkg="tf" type="static_transform_publisher" name="base_link_to_imu_link" args="0.0 0.0 0.0 0.0 0.0 0.0 1.0 /$(arg robot_namespace)/base_link /$(arg robot_namespace)/imu_link 10" />
+    </group>
+</launch>

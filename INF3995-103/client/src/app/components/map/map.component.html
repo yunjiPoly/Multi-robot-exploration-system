@@ -1,0 +1,12 @@
+<div class="map">
+    <h1>Carte de mission
+        <mat-icon class = "map__info">info</mat-icon>
+        <div class = "tooltip-text">
+            <p>Les dimensions de la carte sont en mètres.</p>
+            <p>Les petits carrés de couleur représentent les position courantes des robots.</p>
+            <p>Les couleurs de la carte indiquent la probabilité qu'un espace contienne un obstacle : Noir/gris = obstacle, blanc = zone libre, vert = zone inconnue.</p>
+        </div>
+    </h1>
+    <canvas class = "map__canvas" #gridCanvas></canvas>
+</div>
+

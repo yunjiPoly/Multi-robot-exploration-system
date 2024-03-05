@@ -1,0 +1,67 @@
+/* You can add global styles to this file, and also import other style files */
+@import '@angular/material/theming';
+@include mat-core();
+
+// theme 1
+// $color1: #F8D092;
+// $color2: #38A48C;
+// $color3: #159097;
+// $color4: #1A5678;
+// $color5: #25245D;
+// $color6: #571C56;
+
+// theme 2
+$color1: #ced7e0;
+$color2: #9ccddc;
+$color3: #5591a9;
+$color4: #427996;
+$color4hover: #4ea1ce;
+$color5: #054569;
+$color6: #062c43;
+
+html, body { height: 100%; background-color: $color1; }
+body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+
+
+
+$my-primary-color: #054569;
+
+$my-primary-color: (
+  50 : #e8f0f6,
+  100: #c5d9e8,
+  200: #a2c1da,
+  300: #7eabcc,
+  400: #5b93be,
+  500: #387bae,
+  600: #2d6391,
+  700: #235876,
+  800: #054569,
+  900: #193f5a,
+  1000: #0e273d,
+  A100: #c1d6ff,
+  A200: #8ea2ff,
+  A400: #5b6dff,
+  A700: #4152e6,
+  contrast: (
+    50 : #000000,
+    100: #000000,
+    200: #000000,
+    300: #000000,
+    400: #ffffff,
+    500: #ffffff,
+    600: #ffffff,
+    700: #ffffff,
+    800: #ffffff,
+    900: #ffffff,
+    A100: #000000,
+    A200: #000000,
+    A400: #ffffff,
+    A700: #ffffff,
+  )
+);
+
+$my-app-primary: mat-palette($my-primary-color, 800);
+$my-app-accent:  mat-palette($mat-pink, 500, 900, A100);
+$my-app-warn:    mat-palette($mat-deep-orange);
+$my-app-theme: mat-light-theme($my-app-primary, $my-app-accent, $my-app-warn);
+@include angular-material-theme($my-app-theme);

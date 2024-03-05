@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<launch>
+
+    <arg name="world_name" default="$(find master)/worlds/wall.world"/>
+    <arg name="use_sim_time" value="true" />
+    <arg name="gui" default="true" />
+    <arg name="rviz" default="$(arg gui)" />
+    <arg name="x" default="0.0" />
+    <arg name="y" default="0.8" />
+    <arg name="yaw" default="0.0" />
+
+    <param name="use_sim_time" value="$(arg use_sim_time)" />
+
+    <include file="$(find gazebo_ros)/launch/empty_world.launch">
+        <arg name="world_name" value="$(arg world_name)"/>
+        <arg name="paused" value="$(arg gui)"/>
+        <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+        <arg name="gui" value="$(arg gui)"/>
+        <arg name="headless" value="false"/>
+        <arg name="debug" value="false"/>
+    </include>
+
+    <include file="$(find master)/launch/cartographer.launch"></include>
+
+    <include file="$(find master)/launch/limo_sim.launch">
+        <arg name="robot_namespace" value="limo1"/>
+        <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    </include>
+
+    <include file="$(find master)/launch/limo_sim.launch">
+        <arg name="robot_namespace" value="limo2"/>
+        <arg name="x" value="$(arg x)"/>
+        <arg name="y" value="$(arg y)"/>
+        <arg name="yaw" value="$(arg yaw)"/>
+        <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    </include>
+
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find master)/config/model_display.rviz" if="$(arg rviz)" />
+
+    <node name="spawn_walls" pkg="master" type="spawn-walls" />
+</launch>

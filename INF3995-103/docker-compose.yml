@@ -1,0 +1,8 @@
+version: '3'
+services:
+  server:
+    build: ./server
+    container_name: inf3995-server
+  client:
+    build: ./client
+    container_name: inf3995-client
