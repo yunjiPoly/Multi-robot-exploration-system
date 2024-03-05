@@ -1,5 +1,5 @@
-A computer system connected to the concepts of networking, embedded systems, databases and security
-computer science. This system will consist of a ground station equipped with a web interface
+This project is a computer system applied the concepts of networking, embedded systems, databases and security
+computer science. This system consist of a ground station equipped with a web interface
 which will make it possible to launch exploration missions carried out by a team of two
 robots, i.e. two AgileX Limo rover. The web interface will allow continuous visualization of the map
 produced by the two robots, their position in the map explored by themself as well as their state. These robots, equipped with sensors, will have to explore
